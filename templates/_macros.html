@@ -1,0 +1,8 @@
+{% macro icon(name, cls="") -%}
+<svg class="icon {{ cls }}" aria-hidden="true"><use href="#i-{{ name }}"/></svg>
+{%- endmacro %}
+
+{% macro status_badge(status) -%}
+{% set icons = {"done": "check-circle", "error": "alert", "running": "loader", "queued": "clock"} %}
+<span class="badge badge-{{ status }}">{{ icon(icons.get(status, "info"), "spin" if status == "running" else "") }}{{ status|capitalize }}</span>
+{%- endmacro %}

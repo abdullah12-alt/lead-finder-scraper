@@ -1,0 +1,48 @@
+{% from "_macros.html" import icon, status_badge %}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Lead Finder{% endblock %}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap">
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234f46e5' stroke-width='2.5'%3E%3Ccircle cx='12' cy='12' r='10'/%3E%3Ccircle cx='12' cy='12' r='6'/%3E%3Ccircle cx='12' cy='12' r='2'/%3E%3C/svg%3E">
+</head>
+<body>
+{% include "_icons.html" %}
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="{{ url_for('index') }}">
+      <span class="brand-mark">{{ icon("target") }}</span>
+      <span>Lead Finder</span>
+    </a>
+    {% set ep = request.endpoint %}
+    <nav class="nav">
+      <a href="{{ url_for('index') }}" class="{{ 'active' if ep in ('index', 'search') }}">{{ icon("search") }}<span>New search</span></a>
+      <a href="{{ url_for('admin') }}" class="{{ 'active' if ep == 'admin' }}">{{ icon("database") }}<span>Data &amp; jobs</span></a>
+    </nav>
+    {% if recent_searches %}
+    <div class="nav-section">
+      <div class="nav-title">{{ icon("history") }} Recent searches</div>
+      {% for s in recent_searches %}
+        <a class="recent {{ 'active' if job is defined and job.id == s.id and ep == 'results' }}" href="{{ url_for('results', job_id=s.id) }}">
+          <span class="recent-label">{{ s.label }}</span>
+          <span class="recent-count">{{ s.count }}</span>
+        </a>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <div class="sidebar-foot">
+      {{ icon("landmark") }} Data: SEC EDGAR Form D
+    </div>
+  </aside>
+
+  <main class="main">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+{% block scripts %}{% endblock %}
+</body>
+</html>

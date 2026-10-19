@@ -1,0 +1,275 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}New search · Lead Finder{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div>
+    <h1>Find funded companies</h1>
+    <p class="sub">Search SEC Form D filings for companies that just raised money, then enrich them with web and LinkedIn data.</p>
+  </div>
+  {% if coverage.n %}
+  <div class="coverage">
+    <span class="pill">{{ icon("file") }} {{ "{:,}".format(coverage.n) }} filings</span>
+    <span class="pill">{{ icon("building") }} {{ "{:,}".format(coverage.companies) }} companies</span>
+    <span class="pill">{{ icon("calendar") }} {{ coverage.first }} to {{ coverage.last }}</span>
+  </div>
+  {% endif %}
+</header>
+
+{% if not coverage.n %}
+  <div class="alert alert-warn">{{ icon("alert") }}
+    <div><strong>No SEC data loaded yet.</strong> Open <a href="{{ url_for('admin') }}">Data &amp; jobs</a> and load a quarterly data set plus recent daily filings.</div>
+  </div>
+{% endif %}
+{% if error %}<div class="alert alert-error">{{ icon("alert") }}<div>{{ error }}</div></div>{% endif %}
+
+<form method="post" action="{{ url_for('search') }}" class="search-layout" id="search-form">
+  <div class="search-main">
+
+    <!-- Industries -->
+    <section class="card">
+      <div class="card-head">
+        <div class="card-title"><span class="card-icon">{{ icon("building") }}</span>
+          <div><h2>Industries <span class="tag tag-accent">Required</span></h2>
+            <p class="card-sub">Industry group as declared on Form D</p></div>
+        </div>
+        <div class="presets">
+          <button type="button" class="btn btn-ghost btn-sm" data-preset="Other Technology,Computers,Telecommunications">{{ icon("cpu") }} Tech</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-preset="Biotechnology,Pharmaceuticals,Other Health Care">{{ icon("flask") }} Life sciences</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-preset="">{{ icon("x") }} Clear</button>
+        </div>
+      </div>
+
+      <div class="industry-groups">
+        {% for group, items in industry_groups.items() %}
+        <div class="industry-group">
+          <div class="group-label">{{ group }}</div>
+          <div class="chips">
+            {% for ind in items %}
+              <label class="chip {{ 'chip-fund' if ind == 'Pooled Investment Fund' }}">
+                <input type="checkbox" name="industries" value="{{ ind }}">
+                <span>{{ icon("check", "chip-check") }}{{ ind }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+
+      <label class="switch-row">
+        <span class="switch"><input type="checkbox" name="exclude_funds" checked><span class="slider"></span></span>
+        <span class="switch-text">
+          <strong>{{ icon("shield") }} Exclude pooled investment funds</strong>
+          <span class="muted">Removes VC, PE, hedge and real-estate fund filings. About two-thirds of Form D filings are funds.</span>
+        </span>
+      </label>
+    </section>
+
+    <!-- Filters -->
+    <section class="card">
+      <div class="card-head">
+        <div class="card-title"><span class="card-icon">{{ icon("sliders") }}</span>
+          <div><h2>Filters</h2><p class="card-sub">All optional. Leave a field empty to skip it.</p></div>
+        </div>
+      </div>
+
+      <details class="section" open>
+        <summary>{{ icon("map-pin") }} Location {{ icon("chevron-down", "section-chevron") }}</summary>
+        <div class="fields two">
+          <label class="field"><span>States</span>
+            <input name="states" placeholder="CA, NY, TX" autocomplete="off"></label>
+          <label class="field"><span>Cities</span>
+            <input name="cities" placeholder="San Francisco, Austin" autocomplete="off"></label>
+        </div>
+      </details>
+
+      <details class="section" open>
+        <summary>{{ icon("dollar") }} Raise size {{ icon("chevron-down", "section-chevron") }}</summary>
+        <div class="segmented">
+          <label><input type="radio" name="raise_basis" value="offering" checked><span>Total offering</span></label>
+          <label><input type="radio" name="raise_basis" value="sold"><span>Amount sold</span></label>
+        </div>
+        <div class="fields three">
+          <label class="field"><span>Minimum</span>
+            <div class="input-affix"><em>$</em><input name="min_raise" inputmode="numeric" placeholder="1,000,000"></div></label>
+          <label class="field"><span>Maximum</span>
+            <div class="input-affix"><em>$</em><input name="max_raise" inputmode="numeric" placeholder="20,000,000"></div></label>
+          <label class="field"><span>Min sold ratio</span>
+            <div class="input-affix suffix"><input name="min_sold_ratio" inputmode="numeric" placeholder="50"><em>%</em></div></label>
+        </div>
+        <div class="quick">
+          <span class="muted">Quick:</span>
+          <button type="button" class="link-btn" data-raise="1000000,5000000">$1M to $5M</button>
+          <button type="button" class="link-btn" data-raise="5000000,20000000">$5M to $20M</button>
+          <button type="button" class="link-btn" data-raise="1000000,20000000">$1M to $20M</button>
+          <button type="button" class="link-btn" data-raise="20000000,">$20M+</button>
+        </div>
+      </details>
+
+      <details class="section" open>
+        <summary>{{ icon("calendar") }} Round timing {{ icon("chevron-down", "section-chevron") }}</summary>
+        <div class="fields three">
+          <label class="field"><span>First sale within</span>
+            <div class="input-affix suffix"><input name="first_sale_within_days" inputmode="numeric" placeholder="90"><em>days</em></div></label>
+          <label class="field"><span>Filed within</span>
+            <div class="input-affix suffix"><input name="filed_within_days" inputmode="numeric" placeholder="30"><em>days</em></div></label>
+          <label class="field"><span>Min investors</span>
+            <div class="input-affix suffix"><input name="min_investors" inputmode="numeric" placeholder="3"><em>{{ icon("users") }}</em></div></label>
+        </div>
+        <div class="quick">
+          <span class="muted">First sale within:</span>
+          {% for d in (30, 60, 90, 180) %}<button type="button" class="link-btn" data-days="{{ d }}">{{ d }} days</button>{% endfor %}
+        </div>
+      </details>
+
+      <details class="section">
+        <summary>{{ icon("building") }} Company profile {{ icon("chevron-down", "section-chevron") }}</summary>
+        <div class="fields two">
+          <label class="field"><span>Incorporated from</span><input name="inc_year_min" inputmode="numeric" placeholder="2022"></label>
+          <label class="field"><span>Incorporated to</span><input name="inc_year_max" inputmode="numeric" placeholder="2026"></label>
+        </div>
+        <p class="hint">{{ icon("info") }} Form D gives an exact year only for companies under 5 years old. Older companies match "to" but never "from".</p>
+        <div class="field-label">Entity type</div>
+        <div class="chips">
+          {% for t in entity_types %}
+            <label class="chip chip-sm"><input type="checkbox" name="entity_types" value="{{ t }}"><span>{{ icon("check", "chip-check") }}{{ t }}</span></label>
+          {% endfor %}
+        </div>
+      </details>
+
+      <details class="section">
+        <summary>{{ icon("layers") }} Security types {{ icon("chevron-down", "section-chevron") }}</summary>
+        <p class="hint">Matches filings offering any of the selected types. Equity rounds usually mean a venture-backed startup.</p>
+        <div class="chips">
+          {% for key, (label, col) in security_types.items() %}
+            <label class="chip chip-sm"><input type="checkbox" name="security_types" value="{{ key }}"><span>{{ icon("check", "chip-check") }}{{ label }}</span></label>
+          {% endfor %}
+        </div>
+      </details>
+
+      <details class="section">
+        <summary>{{ icon("trending") }} Revenue range {{ icon("chevron-down", "section-chevron") }}</summary>
+        <p class="hint">Most filers choose "Decline to Disclose", so this filter removes many results.</p>
+        <div class="chips">
+          {% for r in revenue_ranges %}
+            <label class="chip chip-sm"><input type="checkbox" name="revenue_ranges" value="{{ r }}"><span>{{ icon("check", "chip-check") }}{{ r }}</span></label>
+          {% endfor %}
+        </div>
+      </details>
+    </section>
+
+    <!-- Enrichment -->
+    <section class="card">
+      <div class="card-head">
+        <div class="card-title"><span class="card-icon">{{ icon("layers") }}</span>
+          <div><h2>Enrichment</h2><p class="card-sub">Adds contact links to the top results. No logins are used.</p></div>
+        </div>
+      </div>
+      {% set enrich_meta = {
+        "website": ("globe", "Website", "Verified company domain", "No key needed"),
+        "linkedin": ("linkedin", "LinkedIn page", "Company size, industry, HQ", "No key, rate-limited"),
+        "crunchbase": ("briefcase", "Crunchbase", "Profile link and summary", ""),
+        "people": ("users", "Executive profiles", "LinkedIn links for officers", ""),
+      } %}
+      <div class="tiles">
+        {% for o in enrich_options %}
+          {% set m = enrich_meta[o] %}
+          <label class="tile">
+            <input type="checkbox" name="enrich" value="{{ o }}" {% if o in ('website', 'linkedin') %}checked{% endif %}>
+            <span class="tile-body">
+              <span class="tile-icon">{{ icon(m[0]) }}</span>
+              <span class="tile-title">{{ m[1] }}</span>
+              <span class="tile-desc">{{ m[2] }}</span>
+              {% if m[3] %}<span class="tag {{ 'tag-ok' if 'No key' in m[3] else 'tag-muted' }}">{{ m[3] }}</span>{% endif %}
+            </span>
+            <span class="tile-check">{{ icon("check") }}</span>
+          </label>
+        {% endfor %}
+      </div>
+      <div class="enrich-foot">
+        <label class="field inline-field"><span>Enrich the top</span>
+          <input name="max_enrich" value="50" inputmode="numeric" class="w-sm"><span>companies</span></label>
+        <span class="muted small">Search engine: <strong>{{ engines|join(', ') }}</strong></span>
+      </div>
+      {% if engines == ['ddg'] %}
+        <div class="alert alert-info small">{{ icon("info") }}
+          <div>Only DuckDuckGo is available, and it blocks with a captcha after a few searches. Set <code>TAVILY_API_KEY</code> or <code>SERPAPI_API_KEY</code> for reliable Crunchbase and executive lookups.</div>
+        </div>
+      {% endif %}
+    </section>
+  </div>
+
+  <!-- Summary -->
+  <aside class="summary">
+    <div class="card summary-card">
+      <h3>{{ icon("sliders") }} Search summary</h3>
+      <ul id="summary-list" class="summary-list"></ul>
+      <div class="field compact">
+        <span>Max results</span>
+        <input name="limit" value="500" inputmode="numeric">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block" id="run-btn">{{ icon("search") }} Find leads</button>
+      <p class="muted small center" id="run-hint">Select at least one industry</p>
+    </div>
+  </aside>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+const form = document.getElementById("search-form");
+const $ = (sel) => form.querySelector(sel);
+const checked = (name) => [...form.querySelectorAll(`input[name="${name}"]:checked`)].map(i => i.value);
+const val = (name) => (form.elements[name]?.value || "").trim();
+const money = (v) => { const n = Number(v.replace(/[^0-9.]/g, "")); if (!n) return v;
+  return n >= 1e6 ? `$${+(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `$${Math.round(n / 1e3)}K` : `$${n}`; };
+
+function renderSummary() {
+  const items = [];
+  const ind = checked("industries");
+  items.push(["building", "Industries", ind.length ? ind.join(", ") : "None selected", !ind.length]);
+  if (form.elements.exclude_funds.checked) items.push(["shield", "Funds", "Excluded"]);
+  const loc = [val("states"), val("cities")].filter(Boolean).join(" · ");
+  if (loc) items.push(["map-pin", "Location", loc]);
+  const basis = form.querySelector('input[name="raise_basis"]:checked').value === "sold" ? "sold" : "offering";
+  if (val("min_raise") || val("max_raise"))
+    items.push(["dollar", `Raise (${basis})`, `${val("min_raise") ? money(val("min_raise")) : "any"} to ${val("max_raise") ? money(val("max_raise")) : "any"}`]);
+  if (val("min_sold_ratio")) items.push(["trending", "Sold ratio", `at least ${val("min_sold_ratio")}%`]);
+  if (val("first_sale_within_days")) items.push(["calendar", "First sale", `last ${val("first_sale_within_days")} days`]);
+  if (val("filed_within_days")) items.push(["calendar", "Filed", `last ${val("filed_within_days")} days`]);
+  if (val("min_investors")) items.push(["users", "Investors", `${val("min_investors")}+`]);
+  if (val("inc_year_min") || val("inc_year_max")) items.push(["building", "Incorporated", `${val("inc_year_min") || "any"} to ${val("inc_year_max") || "any"}`]);
+  [["entity_types", "Entity"], ["security_types", "Securities"], ["revenue_ranges", "Revenue"]].forEach(([n, l]) => {
+    const v = checked(n).map(x => form.querySelector(`input[name="${n}"][value="${CSS.escape(x)}"]`).closest("label").textContent.trim());
+    if (v.length) items.push(["layers", l, v.join(", ")]);
+  });
+  const en = checked("enrich");
+  items.push(["layers", "Enrich", en.length ? `${en.join(", ")} (top ${val("max_enrich") || 50})` : "Off"]);
+
+  document.getElementById("summary-list").innerHTML = items.map(([ic, label, text, warn]) =>
+    `<li class="${warn ? "warn" : ""}"><svg class="icon"><use href="#i-${ic}"/></svg><div><span>${label}</span><strong></strong></div></li>`).join("");
+  document.querySelectorAll("#summary-list strong").forEach((el, i) => el.textContent = items[i][2]);
+
+  const ok = ind.length > 0;
+  document.getElementById("run-btn").disabled = !ok;
+  document.getElementById("run-hint").hidden = ok;
+}
+
+form.addEventListener("input", renderSummary);
+form.addEventListener("change", renderSummary);
+
+document.querySelectorAll("[data-preset]").forEach(btn => btn.addEventListener("click", () => {
+  const want = btn.dataset.preset ? btn.dataset.preset.split(",") : [];
+  form.querySelectorAll('input[name="industries"]').forEach(i => i.checked = want.includes(i.value));
+  renderSummary();
+}));
+document.querySelectorAll("[data-raise]").forEach(btn => btn.addEventListener("click", () => {
+  const [min, max] = btn.dataset.raise.split(",");
+  form.elements.min_raise.value = min; form.elements.max_raise.value = max; renderSummary();
+}));
+document.querySelectorAll("[data-days]").forEach(btn => btn.addEventListener("click", () => {
+  form.elements.first_sale_within_days.value = btn.dataset.days; renderSummary();
+}));
+renderSummary();
+</script>
+{% endblock %}

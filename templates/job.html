@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, status_badge %}
+{% block title %}Job #{{ job.id }} · Lead Finder{% endblock %}
+{% block content %}
+{% set titles = {'search': 'Lead search', 'load_quarter': 'Loading quarterly data', 'fetch_daily': 'Fetching daily filings'} %}
+{% set kind_icons = {'search': 'search', 'load_quarter': 'database', 'fetch_daily': 'refresh'} %}
+<div class="job-wrap">
+  <div class="card job-card">
+    <div class="job-head">
+      <span class="job-icon" id="job-icon">{{ icon(kind_icons[job.kind]) }}</span>
+      <div>
+        <h1>{{ titles[job.kind] }}</h1>
+        <p class="muted">Job #{{ job.id }} · started {{ job.created_at }}</p>
+      </div>
+      <span id="badge">{{ status_badge(job.status) }}</span>
+    </div>
+
+    <div class="progress"><div id="bar"></div></div>
+    <div class="progress-meta">
+      <span id="message">{{ job.message or '' }}</span>
+      <span id="pct" class="muted"></span>
+    </div>
+
+    {% if job.kind == 'search' %}
+    <ol class="steps" id="steps">
+      <li data-step="filter">{{ icon("sliders") }}<span>Filter filings</span></li>
+      <li data-step="enrich">{{ icon("layers") }}<span>Enrich companies</span></li>
+      <li data-step="done">{{ icon("check-circle") }}<span>Ready</span></li>
+    </ol>
+    {% endif %}
+
+    <div class="job-actions">
+      {% if job.kind == 'search' %}
+        <a class="btn btn-primary" href="{{ url_for('results', job_id=job.id) }}">{{ icon("arrow-right") }} View results</a>
+        <span class="muted small">Results are available as soon as filtering finishes. Enrichment keeps filling in.</span>
+      {% else %}
+        <a class="btn btn-secondary" href="{{ url_for('admin') }}">{{ icon("arrow-left") }} Back to data</a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}
+<script>
+const badgeHtml = {
+  queued: `{{ status_badge('queued') }}`, running: `{{ status_badge('running') }}`,
+  done: `{{ status_badge('done') }}`, error: `{{ status_badge('error') }}`,
+};
+const steps = document.getElementById("steps");
+function setStep(j) {
+  if (!steps) return;
+  const order = ["filter", "enrich", "done"];
+  let current = j.status === "done" ? 3 : (j.message || "").startsWith("Enriching") ? 1 : 0;
+  steps.querySelectorAll("li").forEach((li, i) => {
+    li.classList.toggle("complete", i < current || j.status === "done");
+    li.classList.toggle("current", i === current && j.status !== "done");
+  });
+}
+(function poll() {
+  fetch("{{ url_for('job_status', job_id=job.id) }}").then(r => r.json()).then(j => {
+    document.getElementById("badge").innerHTML = badgeHtml[j.status] || j.status;
+    document.getElementById("message").textContent = j.message || "";
+    const pct = j.status === "done" ? 100 : (j.total ? Math.round(100 * j.progress / j.total) : 0);
+    const bar = document.getElementById("bar");
+    bar.style.width = pct + "%";
+    bar.classList.toggle("error", j.status === "error");
+    bar.classList.toggle("indeterminate", j.status === "running" && !j.total);
+    document.getElementById("pct").textContent = j.total ? pct + "%" : "";
+    setStep(j);
+    if (j.status === "queued" || j.status === "running") setTimeout(poll, 1500);
+    else if (j.status === "done" && j.kind === "search") setTimeout(() => location.href = "{{ url_for('results', job_id=job.id) }}", 800);
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon %}
+{% block title %}{{ rows|length }} companies · Lead Finder{% endblock %}
+{% block content %}
+{% set f = job.params.filters %}
+<header class="page-head">
+  <div>
+    <a class="back" href="{{ url_for('index') }}">{{ icon("arrow-left") }} New search</a>
+    <h1>{{ "{:,}".format(stats.count) }} companies</h1>
+    <div class="filter-chips">
+      {% for ind in f.industries %}<span class="pill">{{ icon("building") }}{{ ind }}</span>{% endfor %}
+      {% if f.exclude_funds %}<span class="pill">{{ icon("shield") }}Funds excluded</span>{% endif %}
+      {% if f.states %}<span class="pill">{{ icon("map-pin") }}{{ f.states|join(", ") }}</span>{% endif %}
+      {% if f.cities %}<span class="pill">{{ icon("map-pin") }}{{ f.cities|join(", ") }}</span>{% endif %}
+      {% if f.min_raise or f.max_raise %}<span class="pill">{{ icon("dollar") }}{{ f.min_raise|money if f.min_raise else "any" }} to {{ f.max_raise|money if f.max_raise else "any" }}</span>{% endif %}
+      {% if f.min_sold_ratio %}<span class="pill">{{ icon("trending") }}{{ (f.min_sold_ratio * 100)|round|int }}%+ sold</span>{% endif %}
+      {% if f.first_sale_within_days %}<span class="pill">{{ icon("calendar") }}First sale {{ f.first_sale_within_days }}d</span>{% endif %}
+      {% if f.filed_within_days %}<span class="pill">{{ icon("calendar") }}Filed {{ f.filed_within_days }}d</span>{% endif %}
+      {% if f.min_investors %}<span class="pill">{{ icon("users") }}{{ f.min_investors }}+ investors</span>{% endif %}
+    </div>
+  </div>
+  <div class="head-actions">
+    <a class="btn btn-secondary" href="{{ url_for('export_csv', job_id=job.id) }}">{{ icon("download") }} CSV</a>
+    <a class="btn btn-primary" href="{{ url_for('export_xlsx', job_id=job.id) }}">{{ icon("sheet") }} Excel</a>
+  </div>
+</header>
+
+{% if job.status in ('queued', 'running') %}
+  <div class="alert alert-info" id="live-banner">{{ icon("loader", "spin") }}
+    <div><strong>Enrichment in progress.</strong> <span id="live-msg">{{ job.message or "" }}</span>
+      <a href="{{ url_for('results', job_id=job.id) }}">Refresh</a> to see new data.</div>
+  </div>
+{% elif job.status == 'error' %}
+  <div class="alert alert-error">{{ icon("alert") }}<div>{{ job.message }}</div></div>
+{% elif job.message and 'partly enriched' in job.message %}
+  <div class="alert alert-warn">{{ icon("info") }}<div>{{ job.message }}</div></div>
+{% endif %}
+
+<div class="stats">
+  <div class="stat"><span class="stat-icon">{{ icon("building") }}</span><div><span class="stat-label">Companies</span><strong>{{ "{:,}".format(stats.count) }}</strong></div></div>
+  <div class="stat"><span class="stat-icon">{{ icon("dollar") }}</span><div><span class="stat-label">Total sold</span><strong>{{ stats.total_sold|money }}</strong></div></div>
+  <div class="stat"><span class="stat-icon">{{ icon("trending") }}</span><div><span class="stat-label">Median offering</span><strong>{{ stats.median_offering|money }}</strong></div></div>
+  <div class="stat"><span class="stat-icon">{{ icon("globe") }}</span><div><span class="stat-label">Websites found</span><strong>{{ stats.with_website }}</strong></div></div>
+  <div class="stat"><span class="stat-icon">{{ icon("linkedin") }}</span><div><span class="stat-label">LinkedIn found</span><strong>{{ stats.with_linkedin }}</strong></div></div>
+</div>
+
+{% if rows %}
+<div class="card table-card">
+  <div class="table-toolbar">
+    <div class="search-input">{{ icon("search") }}<input id="filter" placeholder="Filter by name, city, person..." autocomplete="off"></div>
+    <span class="muted small" id="row-count">{{ rows|length }} rows</span>
+  </div>
+  <div class="table-wrap">
+  <table id="results" class="data-table">
+    <thead>
+      <tr>
+        {% for label, type, cls in [("Company","text",""),("Location","text",""),("Industry","text",""),("Offering","num","num"),("Sold","num","num"),("Investors","num","num"),("First sale","text",""),("Contact","text",""),("Executives","text",""),("Links","none","")] %}
+          <th class="{{ cls }}" {% if type != 'none' %}data-type="{{ type }}"{% endif %}>
+            {% if type != 'none' %}<button type="button" class="th-btn">{{ label }}<span class="sort-icons">{{ icon("sort", "s-none") }}{{ icon("chevron-up", "s-asc") }}{{ icon("chevron-down", "s-desc") }}</span></button>{% else %}{{ label }}{% endif %}
+          </th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+    {% for r in rows %}
+      <tr>
+        <td><div class="company-cell">
+          <span class="avatar">{{ (r.entity_name or "?")[0]|upper }}</span>
+          <div>
+            <div class="company-name">{{ r.entity_name }}</div>
+            <div class="meta">
+              {{ r.entity_type or "" }}{% if r.inc_year %} · Inc. {{ r.inc_year }}{% elif r.inc_over_five %} · Inc. 5+ yrs{% endif %}
+              {% if r.linkedin_size %} · {{ r.linkedin_size }}{% endif %}
+            </div>
+          </div>
+        </div></td>
+        <td class="loc"><span class="with-icon">{{ icon("map-pin", "dim") }}{{ (r.city or "")|title }}{% if r.state %}, {{ r.state }}{% endif %}</span></td>
+        <td><span class="tag tag-muted">{{ r.industry or "" }}</span>
+          {% if r.securities %}<div class="meta">{{ r.securities }}</div>{% endif %}</td>
+        <td class="num" data-v="{{ r.total_offering or -1 }}">{{ r.total_offering|money if r.total_offering is not none else ('Indefinite' if r.offering_indefinite else '-') }}</td>
+        <td class="num" data-v="{{ r.total_sold or 0 }}">
+          {{ r.total_sold|money }}
+          {% if r.sold_pct is not none %}
+            <div class="bar" title="{{ r.sold_pct }}% of offering sold"><span style="width: {{ [r.sold_pct, 100]|min }}%"></span></div>
+            <div class="meta">{{ r.sold_pct }}% sold</div>
+          {% endif %}
+        </td>
+        <td class="num" data-v="{{ r.num_investors or 0 }}">{{ r.num_investors if r.num_investors is not none else '-' }}</td>
+        <td data-v="{{ r.sale_date or '' }}"><span class="nowrap">{{ r.sale_date or ('Yet to occur' if r.yet_to_occur else '-') }}</span>
+          <div class="meta nowrap">Filed {{ r.filing_date }}</div></td>
+        <td><div class="contact">
+          {% if r.phone %}<a class="with-icon nowrap" href="tel:{{ r.phone }}">{{ icon("phone", "dim") }}{{ r.phone }}</a>{% endif %}
+          {% if r.website %}<a class="with-icon nowrap" href="{{ r.website }}" target="_blank" rel="noopener">{{ icon("globe", "dim") }}{{ r.website.replace('https://', '') }}</a>{% endif %}
+        </div></td>
+        <td class="people">
+          {% for p in r.people[:2] %}
+            <div class="person">
+              {% if p.linkedin %}<a href="{{ p.linkedin }}" target="_blank" rel="noopener">{{ p.name }}</a>{% else %}<span>{{ p.name }}</span>{% endif %}
+              <span class="meta">{{ p.role or "" }}</span>
+            </div>
+          {% endfor %}
+          {% if r.people|length > 2 %}<span class="meta">+{{ r.people|length - 2 }} more</span>{% endif %}
+        </td>
+        <td class="links">
+          <div class="icon-links">
+            {% if r.website %}<a class="icon-btn" href="{{ r.website }}" target="_blank" rel="noopener" title="Website">{{ icon("globe") }}</a>{% endif %}
+            {% if r.linkedin_url %}<a class="icon-btn li" href="{{ r.linkedin_url }}" target="_blank" rel="noopener" title="LinkedIn{{ ' · ' ~ r.linkedin_hq if r.linkedin_hq }}">{{ icon("linkedin") }}</a>{% endif %}
+            {% if r.crunchbase_url %}<a class="icon-btn cb" href="{{ r.crunchbase_url }}" target="_blank" rel="noopener" title="{{ r.crunchbase_snippet or 'Crunchbase' }}">{{ icon("briefcase") }}</a>{% endif %}
+            <a class="icon-btn" href="{{ r.edgar_url }}" target="_blank" rel="noopener" title="SEC filing">{{ icon("landmark") }}</a>
+          </div>
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+{% else %}
+  <div class="card empty">
+    {{ icon("inbox", "empty-icon") }}
+    <h2>No companies match</h2>
+    <p class="muted">Loosen some of the optional filters, or load more SEC data on the <a href="{{ url_for('admin') }}">Data &amp; jobs</a> page.</p>
+    <a class="btn btn-primary" href="{{ url_for('index') }}">{{ icon("arrow-left") }} Back to search</a>
+  </div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+const table = document.getElementById("results");
+if (table) {
+  const tbody = table.tBodies[0];
+  const ths = [...table.tHead.rows[0].cells];
+  ths.forEach((th, idx) => {
+    if (!th.dataset.type) return;
+    th.querySelector("button").addEventListener("click", () => {
+      const asc = th.dataset.dir !== "asc";
+      ths.forEach(h => delete h.dataset.dir);
+      th.dataset.dir = asc ? "asc" : "desc";
+      const val = tr => {
+        const td = tr.children[idx];
+        if (th.dataset.type === "num") return parseFloat(td.dataset.v);
+        return (td.dataset.v ?? td.textContent).trim().toLowerCase();
+      };
+      [...tbody.rows].sort((a, b) => (val(a) > val(b) ? 1 : val(a) < val(b) ? -1 : 0) * (asc ? 1 : -1))
+        .forEach(tr => tbody.appendChild(tr));
+    });
+  });
+  const count = document.getElementById("row-count");
+  document.getElementById("filter").addEventListener("input", e => {
+    const q = e.target.value.toLowerCase();
+    let shown = 0;
+    [...tbody.rows].forEach(tr => { tr.hidden = q && !tr.textContent.toLowerCase().includes(q); if (!tr.hidden) shown++; });
+    count.textContent = `${shown} rows`;
+  });
+}
+{% if job.status in ('queued', 'running') %}
+(function poll() {
+  fetch("{{ url_for('job_status', job_id=job.id) }}").then(r => r.json()).then(j => {
+    const msg = document.getElementById("live-msg");
+    if (msg) msg.textContent = j.message || "";
+    if (j.status === "done" || j.status === "error") location.reload();
+    else setTimeout(poll, 4000);
+  });
+})();
+{% endif %}
+</script>
+{% endblock %}

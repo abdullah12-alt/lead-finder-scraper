@@ -1,0 +1,91 @@
+{% extends "base.html" %}
+{% from "_macros.html" import icon, status_badge %}
+{% block title %}Data &amp; jobs · Lead Finder{% endblock %}
+{% block content %}
+<header class="page-head">
+  <div>
+    <h1>Data &amp; jobs</h1>
+    <p class="sub">Load SEC Form D filings into the local database and track background jobs.</p>
+  </div>
+</header>
+
+<div class="stats">
+  <div class="stat"><span class="stat-icon">{{ icon("file") }}</span><div><span class="stat-label">Filings</span><strong>{{ "{:,}".format(coverage.n) }}</strong></div></div>
+  <div class="stat"><span class="stat-icon">{{ icon("building") }}</span><div><span class="stat-label">Companies</span><strong>{{ "{:,}".format(coverage.companies) }}</strong></div></div>
+  <div class="stat"><span class="stat-icon">{{ icon("calendar") }}</span><div><span class="stat-label">Earliest filing</span><strong>{{ coverage.first or '-' }}</strong></div></div>
+  <div class="stat"><span class="stat-icon">{{ icon("clock") }}</span><div><span class="stat-label">Latest filing</span><strong>{{ coverage.last or '-' }}</strong></div></div>
+</div>
+
+<div class="grid-2">
+  <section class="card">
+    <div class="card-head">
+      <div class="card-title"><span class="card-icon">{{ icon("refresh") }}</span>
+        <div><h2>Recent filings</h2><p class="card-sub">EDGAR daily index, newest data</p></div>
+      </div>
+    </div>
+    <p class="muted">Pulls every Form D and D/A filed in the period and reads each XML filing. Use it for anything newer than the
+      latest quarterly data set. Takes about one minute per business day.</p>
+    <form method="post" action="{{ url_for('fetch_daily') }}" class="row-form">
+      <label class="field inline-field"><span>Last</span>
+        <input name="days" value="7" inputmode="numeric" class="w-sm"><span>days</span></label>
+      <button class="btn btn-primary">{{ icon("download") }} Fetch filings</button>
+    </form>
+    <p class="hint">{{ icon("info") }} Schedule <code>python cli.py fetch-daily --days 3</code> daily to keep data fresh.</p>
+  </section>
+
+  <section class="card">
+    <div class="card-head">
+      <div class="card-title"><span class="card-icon">{{ icon("database") }}</span>
+        <div><h2>Quarterly data sets</h2><p class="card-sub">Bulk history, about 15,000 filings per quarter</p></div>
+      </div>
+    </div>
+    {% if not quarters %}
+      <div class="alert alert-error">{{ icon("alert") }}<div>Couldn't reach the SEC listing page. Check your network and <code>SEC_USER_AGENT</code>.</div></div>
+    {% else %}
+    <form method="post" action="{{ url_for('load_quarters') }}">
+      <div class="quarter-grid">
+        {% for q in quarters %}
+          <label class="qchip {{ 'loaded' if q in loaded }}">
+            <input type="checkbox" name="quarters" value="{{ q }}" {% if loop.index <= 2 and q not in loaded %}checked{% endif %}>
+            <span>
+              <strong>{{ q[:4] }} {{ q[4:]|upper }}</strong>
+              {% if q in loaded %}<em>{{ icon("check") }}{{ "{:,}".format(loaded[q]) }}</em>{% else %}<em>Not loaded</em>{% endif %}
+            </span>
+          </label>
+        {% endfor %}
+      </div>
+      <button class="btn btn-primary">{{ icon("download") }} Load selected</button>
+    </form>
+    {% endif %}
+  </section>
+</div>
+
+<section class="card table-card">
+  <div class="card-head pad">
+    <div class="card-title"><span class="card-icon">{{ icon("history") }}</span>
+      <div><h2>Recent jobs</h2></div>
+    </div>
+  </div>
+  <div class="table-wrap">
+  <table class="data-table">
+    <thead><tr><th>#</th><th>Type</th><th>Status</th><th>Message</th><th>Started</th><th></th></tr></thead>
+    <tbody>
+    {% set kind_icons = {'search': 'search', 'load_quarter': 'database', 'fetch_daily': 'refresh'} %}
+    {% set kind_names = {'search': 'Lead search', 'load_quarter': 'Quarterly load', 'fetch_daily': 'Daily fetch'} %}
+    {% for j in jobs %}
+      <tr>
+        <td class="muted">{{ j.id }}</td>
+        <td><span class="with-icon nowrap">{{ icon(kind_icons[j.kind], "dim") }}{{ kind_names[j.kind] }}</span></td>
+        <td>{{ status_badge(j.status) }}</td>
+        <td class="msg">{{ j.message or '' }}</td>
+        <td class="nowrap muted">{{ j.created_at }}</td>
+        <td><a class="icon-btn" title="Open" href="{{ url_for('results', job_id=j.id) if j.kind == 'search' else url_for('job_page', job_id=j.id) }}">{{ icon("arrow-right") }}</a></td>
+      </tr>
+    {% else %}
+      <tr><td colspan="6"><div class="empty slim">{{ icon("inbox", "empty-icon") }}<p class="muted">No jobs yet</p></div></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</section>
+{% endblock %}
