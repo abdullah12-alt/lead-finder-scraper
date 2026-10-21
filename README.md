@@ -30,11 +30,54 @@ It reads **SEC Form D filings**, which are free, public, and need no account. Ev
 
 Requirements: Python 3.11 or newer (tested on 3.13), Windows/macOS/Linux, internet access.
 
+These steps set the project up on any laptop. The virtual environment (`.venv`) is a private folder of Python packages for this project only, so it never clashes with other projects. It is not copied between machines, so **create it fresh on each laptop**. When you copy the project, leave out the `.venv/` and `data/` folders.
+
+### Step 1: Check Python is installed
+
 ```powershell
-cd D:\scraping
-python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
+python --version
 ```
+
+It should print `Python 3.11` or newer. If not, install Python from https://www.python.org/downloads/. On Windows, tick **"Add python.exe to PATH"** in the installer. On macOS/Linux, use `python3` instead of `python` if `python` isn't found.
+
+### Step 2: Open a terminal in the project folder
+
+```powershell
+cd "D:\Learning Projects\scraping"     # use your own path
+```
+
+### Step 3: Create the virtual environment (once per laptop)
+
+```powershell
+python -m venv .venv
+```
+
+This creates a `.venv` folder inside the project.
+
+### Step 4: Activate the virtual environment (every time you open a new terminal)
+
+| System | Command |
+|---|---|
+| Windows (PowerShell) | `.venv\Scripts\Activate.ps1` |
+| Windows (Command Prompt) | `.venv\Scripts\activate.bat` |
+| macOS / Linux | `source .venv/bin/activate` |
+
+When it works, the prompt starts with `(.venv)`. To leave it later, type `deactivate`.
+
+> **PowerShell says "running scripts is disabled on this system"?** Run this once, then activate again:
+> ```powershell
+> Set-ExecutionPolicy -Scope CurrentUser RemoteSigned
+> ```
+
+### Step 5: Install the packages (once per laptop)
+
+With `(.venv)` showing in the prompt:
+
+```powershell
+pip install -r requirements.txt
+```
+
+### Step 6: Create the `.env` settings file
 
 Create a file named `.env` in the project folder:
 
@@ -46,11 +89,19 @@ TAVILY_API_KEY=tvly-...
 - `SEC_USER_AGENT` is **required**. The SEC asks every automated client to identify itself with a name and contact email, and may block requests without one.
 - `TAVILY_API_KEY` is optional but recommended. It enables Crunchbase and executive lookups (free tier: 1,000 searches a month at https://tavily.com).
 
-Start the app:
+### Step 7: Start the app
+
+With the virtual environment active:
 
 ```powershell
-.venv\Scripts\python app.py
+python app.py
 ```
+
+Without activating, call the environment's Python directly: `.venv\Scripts\python app.py` (Windows) or `.venv/bin/python app.py` (macOS/Linux).
+
+Leave the terminal open while you use the app. Press **Ctrl+C** to stop it.
+
+### Step 8: Use it
 
 Open **http://127.0.0.1:5000**, then:
 
@@ -61,6 +112,38 @@ Open **http://127.0.0.1:5000**, then:
 ---
 
 ## 2. How it works (overview)
+
+### What is Form D?
+
+When a US company raises private money from investors (for example a seed or Series A round), it must file a short form with the **SEC**, the US government's financial regulator. That form is called **Form D**.
+
+Form D filings are public and free to read, with no account needed. Each one tells us:
+
+- the company's **name, address and phone number**
+- its **industry** and type (corporation, LLC, and so on)
+- **how much it is raising** and **how much it has raised so far**
+- **when the first sale happened**, which shows how fresh the round is
+- the **names of its executives and directors**
+
+In short, Form D tells us **who just got funded, how much, and when**. A company that just raised money has budget to spend, which makes it a good sales lead.
+
+### Where and how the data is collected
+
+1. **Load from the SEC.** The scraper downloads Form D filings from SEC EDGAR, the SEC's public filing website, in two ways:
+   - **Quarterly data sets:** one file per quarter with every Form D filing (about 15,000 companies), loaded in seconds.
+   - **Daily filings:** for the newest companies, it reads the SEC's daily list of new filings and downloads each new Form D.
+
+   It follows the SEC's rules: it identifies itself on every request and stays under the SEC's speed limit. Everything is saved in a local database, so searches are instant.
+2. **Filter.** You choose industry, location, raise size, timing and more, and the scraper returns the matching companies.
+3. **Enrich.** Form D has no website or LinkedIn link, so the scraper adds them **without logging in to any site and without paid accounts**:
+   - **LinkedIn company page:** guesses the company's LinkedIn address from its name, opens the public page, and checks that the name and city match the filing.
+   - **Website:** taken from LinkedIn, or found by trying likely domains (like `companyname.com`) and confirming the site belongs to the company.
+   - **Crunchbase and executives:** found through a normal web search on a free plan. Crunchbase itself is never opened.
+
+   Every match is checked before it is saved, because a wrong link is worse than no link.
+4. **Export.** The results table can be downloaded as Excel or CSV for the sales team.
+
+### Technical flow
 
 ```
                  ┌──────────────────────────── SEC EDGAR (free, public) ───────────────────────────┐
